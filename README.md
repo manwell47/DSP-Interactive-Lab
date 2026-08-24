@@ -1,5 +1,6 @@
 # 🎛️ DSP Interactive Lab
 
+[![Demo en vivo](https://img.shields.io/badge/Demo%20en%20vivo-github--pages-blueviolet.svg)](https://manwell47.github.io/DSP-Interactive-Lab/)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)
 ![Vite](https://img.shields.io/badge/Vite-5.4-purple.svg)
