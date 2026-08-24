@@ -393,4 +393,41 @@ describe('IirSosProcessor (hilo C, §7)', () => {
         const out = outputs[0][0];
         for (let i = 0; i < N; i++) expect(out[i]).toBe(0);
     });
+
+    it('T-PROC-11 — salida estéreo (outCh=2): el generador interno suena en AMBOS canales (L = R)', () => {
+        const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'white-noise', ramp: { samples: 0, mode: 'crossfade' } });
+        proc.onMessage({ type: 'PLAY', start: true });
+
+        const N = 128;
+        const outL = new Float32Array(N);
+        const outR = new Float32Array(N);
+        const outputs: Float32Array[][] = [[outL, outR]];
+        proc.process([[]], outputs, {});
+        let peak = 0;
+        for (let i = 0; i < N; i++) {
+            peak = Math.max(peak, Math.abs(outL[i]));
+            expect(outR[i]).toBe(outL[i]); // el canal derecho NO queda mudo
+        }
+        expect(peak).toBeGreaterThan(0.1); // y el ruido no es silencio
+    });
+
+    it('T-PROC-12 — user-sample estéreo (inCh=2): downmix L+R/2 a mono y salida en ambos canales', () => {
+        const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'user-sample', ramp: { samples: 0, mode: 'crossfade' } });
+        proc.onMessage({ type: 'PLAY', start: true });
+
+        const N = 128;
+        const left = monoBlock(N, (i) => 0.3 * Math.sin((2 * Math.PI * 3 * i) / N));
+        const right = monoBlock(N, (i) => 0.5 * Math.sin((2 * Math.PI * 4 * i) / N));
+        const outL = new Float32Array(N);
+        const outR = new Float32Array(N);
+        const outputs: Float32Array[][] = [[outL, outR]];
+        proc.process([[left, right]], outputs, {});
+        for (let i = 0; i < N; i++) {
+            const expected = (left[i] + right[i]) * 0.5;
+            expect(outL[i]).toBeCloseTo(expected, 6);
+            expect(outR[i]).toBeCloseTo(expected, 6);
+        }
+    });
 });

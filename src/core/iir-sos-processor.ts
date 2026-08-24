@@ -113,23 +113,28 @@ export class IirSosProcessor {
     }
 
     /**
-     * Procesa un bloque de 128 muestras (mono). El canal de entrada del grafo
-     * (p. ej. una pista MP3/WAV decodificada → AudioBufferSourceNode) SOLO se
-     * usa cuando la fuente es 'user-sample'. Los generadores internos
-     * (white-noise / sine) NUNCA dependen del canal de entrada: en algunos
-     * navegadores un AudioWorkletNode entrega un canal mudo (a ceros) aunque no
-     * haya conexiones aguas arriba, lo que silenciaba el ruido (§7.4, corrección
-     * v1.2.1). 'none' es silencio. Cero asignaciones (M3).
+     * Procesa un bloque de 128 muestras en mono y escribe la señal IDÉNTICA en
+     * TODOS los canales de salida (outCh = 2 → L y R), de modo que suene en ambos
+     * altavoces. El canal de entrada del grafo (p. ej. una pista MP3/WAV
+     * decodificada → AudioBufferSourceNode) SOLO se usa cuando la fuente es
+     * 'user-sample'; si la entrada es estéreo (inCh = 2) se hace downmix L+R/2 a
+     * mono. Los generadores internos (white-noise / sine) NUNCA dependen del
+     * canal de entrada: en algunos navegadores un AudioWorkletNode entrega un
+     * canal mudo (a ceros) aunque no haya conexiones aguas arriba, lo que
+     * silenciaba el ruido (§7.4, corrección v1.2.1). 'none' es silencio. La
+     * señal se genera UNA vez por muestra (no por canal) para que L y R queden en
+     * fase. Cero asignaciones (M3).
      */
     process(
         inputs: Float32Array[][],
         outputs: Float32Array[][],
         _parameters: Record<string, Float32Array>,
     ): boolean {
-        const output = outputs[0]?.[0];
-        if (!output) return true;
+        const outChannels = outputs[0];
+        if (!outChannels || outChannels.length === 0) return true;
         const input = inputs[0]?.[0];
-        const n = output.length;
+        const input2 = inputs[0]?.[1];
+        const n = outChannels[0].length;
 
         const useInput = this.source === 'user-sample' && input !== undefined;
         if (!this.loggedProcess) {
@@ -144,9 +149,15 @@ export class IirSosProcessor {
             );
         }
         for (let i = 0; i < n; i++) {
-            const x = useInput ? input[i] : this.sampleSource();
+            const x = useInput
+                ? input2 !== undefined
+                    ? (input[i] + input2[i]) * 0.5
+                    : input[i]
+                : this.sampleSource();
             const y = this.playing ? this.smoother.processSample(x) * this.gain : 0;
-            output[i] = y;
+            for (let ch = 0; ch < outChannels.length; ch++) {
+                outChannels[ch][i] = y;
+            }
         }
         return true;
     }
