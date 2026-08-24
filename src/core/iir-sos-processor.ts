@@ -32,6 +32,15 @@ const LCG_A = 1664525;
 const LCG_C = 1013904223;
 const LCG_M = 4294967296;
 
+/**
+ * Log de consola seguro en el AudioWorkletGlobalScope. El tsconfig Node no
+ * incluye lib DOM, así que `console` no está tipado; se accede vía globalThis.
+ */
+function workletWarn(...args: unknown[]): void {
+    const c = (globalThis as { console?: { warn(...a: unknown[]): void } }).console;
+    c?.warn('[worklet]', ...args);
+}
+
 /** Puerto del AudioWorkletProcessor (node.port en el hilo C). */
 export interface IirSosProcessorPort {
     postMessage(message: unknown): void;
@@ -60,6 +69,8 @@ export class IirSosProcessor {
     private phase = 0;
     /** Estado del LCG de ruido blanco. */
     private lcgState = 0x9e3779b9;
+    /** Ya se registró el primer bloque process() (log único de diagnóstico). */
+    private loggedProcess = false;
 
     constructor(options: IirSosProcessorOptions = {}) {
         const g = globalThis as { sampleRate?: number; port?: IirSosProcessorPort };
@@ -78,16 +89,26 @@ export class IirSosProcessor {
                 break;
             case 'SET_SOURCE':
                 this.source = msg.source;
+                this.dbg('onMessage SET_SOURCE ->', msg.source);
                 break;
             case 'SET_GAIN':
                 this.gain = msg.gain;
+                this.dbg('onMessage SET_GAIN ->', msg.gain);
                 break;
             case 'SET_BYPASS':
                 this.smoother.setBypass(msg.bypass, msg.ramp);
                 break;
             case 'PLAY':
                 this.playing = msg.start;
+                this.dbg('onMessage PLAY ->', msg.start);
                 break;
+        }
+    }
+
+    /** Log de diagnóstico SOLO en el AudioWorkletGlobalScope real (no en tests Node). */
+    private dbg(...args: unknown[]): void {
+        if (typeof (globalThis as { registerProcessor?: unknown }).registerProcessor === 'function') {
+            workletWarn(...args);
         }
     }
 
@@ -111,6 +132,10 @@ export class IirSosProcessor {
         const n = output.length;
 
         const useInput = this.source === 'user-sample' && input !== undefined;
+        if (!this.loggedProcess) {
+            this.loggedProcess = true;
+            this.dbg('process: primer bloque — source =', this.source, 'playing =', this.playing, 'useInput =', useInput, 'sampleRate =', this.sampleRate);
+        }
         for (let i = 0; i < n; i++) {
             const x = useInput ? input[i] : this.sampleSource();
             const y = this.playing ? this.smoother.processSample(x) * this.gain : 0;
@@ -166,6 +191,8 @@ if (typeof (globalThis as { registerProcessor?: unknown }).registerProcessor ===
                 return this.impl.process(inputs, outputs, parameters);
             }
         }
+        workletWarn('registrando iir-sos-processor…');
         G.registerProcessor('iir-sos-processor', IirSosProcessorNode);
+        workletWarn('registrado iir-sos-processor, sampleRate =', G.sampleRate);
     }
 }

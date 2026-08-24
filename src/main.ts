@@ -94,14 +94,29 @@ async function boot(): Promise<void> {
     let audio: AudioContext | null = null;
     let audioNode: AudioWorkletNode | null = null;
     let nodePort: NodeLike = { postMessage: () => { } };
+    // Logs de diagnóstico (v1.2.2): mirar la consola del navegador (F12).
+    const dbg = (...args: unknown[]): void => {
+        // eslint-disable-next-line no-console
+        console.warn('[audio]', ...args);
+    };
+    dbg('boot: crossOriginIsolated =', crossOriginIsolated);
     try {
         audio = new AudioContext({ latencyHint: 'interactive' });
-        await audio.audioWorklet.addModule(
-            new URL('./core/iir-sos-processor.ts', import.meta.url),
-        );
+        dbg('AudioContext creado, state =', audio.state);
+        const workletUrl = new URL('./core/iir-sos-processor.ts', import.meta.url).href;
+        dbg('addModule URL =', workletUrl);
+        await audio.audioWorklet.addModule(workletUrl);
+        dbg('addModule OK');
         audioNode = new AudioWorkletNode(audio, 'iir-sos-processor');
+        dbg('AudioWorkletNode creado');
         audioNode.connect(audio.destination);
-        nodePort = { postMessage: (m) => audioNode!.port.postMessage(m) };
+        dbg('AudioWorkletNode conectado a destination');
+        nodePort = {
+            postMessage: (m) => {
+                dbg('nodePort ->', (m as { type?: string }).type);
+                audioNode!.port.postMessage(m);
+            },
+        };
     } catch (err) {
         // eslint-disable-next-line no-console
         console.error('[main] audio no disponible:', err);
@@ -279,7 +294,15 @@ async function boot(): Promise<void> {
 
     /** Arranca la pista importada desde el principio (si hay una cargada). */
     function startImportedTrack(): void {
-        if (!audio || !audioNode || !importedBuffer || bufferSource) return;
+        if (!audio || !audioNode || !importedBuffer || bufferSource) {
+            dbg('startImportedTrack: NO arranca →', {
+                audioOk: audio !== null,
+                audioNodeOk: audioNode !== null,
+                hasBuffer: importedBuffer !== null,
+                alreadyRunning: bufferSource !== null,
+            });
+            return;
+        }
         const src = audio.createBufferSource();
         src.buffer = importedBuffer;
         src.connect(audioNode);
@@ -302,6 +325,7 @@ async function boot(): Promise<void> {
         if (!file || !audio) return;
         try {
             const decoded = await audio.decodeAudioData(await file.arrayBuffer());
+            dbg('pista decodificada:', file.name, 'dur =', decoded.duration, 'fs =', decoded.sampleRate);
             stopImportedTrack();
             importedBuffer = decoded;
             trackName.textContent = `🎵 ${file.name}`;
@@ -317,6 +341,7 @@ async function boot(): Promise<void> {
     });
 
     sourceSelect.addEventListener('change', () => {
+        dbg('sourceSelect change ->', sourceSelect.value, '(playing =', playing, ')');
         app.setSource(sourceSelect.value as AudioSourceId);
         if (sourceSelect.value === 'user-sample') {
             if (playing) startImportedTrack();
@@ -332,6 +357,7 @@ async function boot(): Promise<void> {
     playButton.addEventListener('click', () => {
         void audio?.resume();
         playing = !playing;
+        dbg('Play click: playing =', playing, ', source =', sourceSelect.value, ', audioNode =', audioNode !== null, ', audio.state =', audio?.state);
         app.setPlaying(playing);
         playButton.textContent = playing ? '⏸ Stop' : '▶ Play';
         if (sourceSelect.value === 'user-sample') {
