@@ -48,8 +48,16 @@
                     <select id="source">
                         <option value="sine">Seno (440 Hz)</option>
                         <option value="white-noise" selected>Ruido blanco</option>
+                        <option value="user-sample">Pista importada</option>
                         <option value="none">Silencio</option>
                     </select>
+                </label>
+                <label class="track-label">
+                    <span id="track-name">🎵 Sin pista</span>
+                    <label class="track-file-btn">
+                        Cargar MP3/WAV
+                        <input id="track-file" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav,audio/x-wav" />
+                    </label>
                 </label>
                 <label>Ganancia
                     <input id="gain" type="range" min="0" max="2" step="0.01" value="1" />

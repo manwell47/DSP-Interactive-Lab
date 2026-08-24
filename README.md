@@ -4,7 +4,7 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)
 ![Vite](https://img.shields.io/badge/Vite-5.4-purple.svg)
-![Tests](https://img.shields.io/badge/Tests-84%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/Tests-89%20passing-brightgreen.svg)
 
 **Motor interactivo de aprendizaje de procesamiento digital de señales (DSP).**
 Edita polos y ceros en el plano Z y escucha, en tiempo real, el resultado: espectro

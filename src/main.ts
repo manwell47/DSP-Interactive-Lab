@@ -92,15 +92,16 @@ async function boot(): Promise<void> {
     // Hilo C — audio: AudioWorkletProcessor (iir-sos-processor.ts)
     // -----------------------------------------------------------------------
     let audio: AudioContext | null = null;
+    let audioNode: AudioWorkletNode | null = null;
     let nodePort: NodeLike = { postMessage: () => { } };
     try {
         audio = new AudioContext({ latencyHint: 'interactive' });
         await audio.audioWorklet.addModule(
             new URL('./core/iir-sos-processor.ts', import.meta.url),
         );
-        const node = new AudioWorkletNode(audio, 'iir-sos-processor');
-        node.connect(audio.destination);
-        nodePort = { postMessage: (m) => node.port.postMessage(m) };
+        audioNode = new AudioWorkletNode(audio, 'iir-sos-processor');
+        audioNode.connect(audio.destination);
+        nodePort = { postMessage: (m) => audioNode!.port.postMessage(m) };
     } catch (err) {
         // eslint-disable-next-line no-console
         console.error('[main] audio no disponible:', err);
@@ -252,21 +253,91 @@ async function boot(): Promise<void> {
     // -----------------------------------------------------------------------
     // Control de audio (inspector → nodo vía DspApp/relay)
     // -----------------------------------------------------------------------
+
+    // Pista importada (MP3/WAV): AudioBuffer decodificado + AudioBufferSourceNode
+    // conectado a la entrada del worklet. El worklet solo consume el canal de
+    // entrada cuando la fuente es 'user-sample' (§7.4, corrección v1.2.1).
+    let importedBuffer: AudioBuffer | null = null;
+    let bufferSource: AudioBufferSourceNode | null = null;
+    const trackName = getEl<HTMLSpanElement>('track-name');
+    const trackFile = getEl<HTMLInputElement>('track-file');
+    const playButton = getEl<HTMLButtonElement>('play');
+    let playing = false;
+
+    /** Detiene y desconecta la reproducción de la pista importada (si hay). */
+    function stopImportedTrack(): void {
+        if (bufferSource) {
+            try {
+                bufferSource.stop();
+            } catch {
+                // ya terminada: ignorar
+            }
+            bufferSource.disconnect();
+            bufferSource = null;
+        }
+    }
+
+    /** Arranca la pista importada desde el principio (si hay una cargada). */
+    function startImportedTrack(): void {
+        if (!audio || !audioNode || !importedBuffer || bufferSource) return;
+        const src = audio.createBufferSource();
+        src.buffer = importedBuffer;
+        src.connect(audioNode);
+        src.onended = () => {
+            bufferSource = null;
+            // Si terminó sola (no por Stop del usuario): apagar el botón Play.
+            if (playing && sourceSelect.value === 'user-sample') {
+                playing = false;
+                app.setPlaying(false);
+                playButton.textContent = '▶ Play';
+            }
+        };
+        src.start();
+        bufferSource = src;
+    }
+
+    // Carga de archivo MP3/WAV → decodeAudioData → AudioBuffer.
+    trackFile.addEventListener('change', async () => {
+        const file = trackFile.files?.[0];
+        if (!file || !audio) return;
+        try {
+            const decoded = await audio.decodeAudioData(await file.arrayBuffer());
+            stopImportedTrack();
+            importedBuffer = decoded;
+            trackName.textContent = `🎵 ${file.name}`;
+            sourceSelect.value = 'user-sample';
+            app.setSource('user-sample');
+            if (playing) startImportedTrack(); // reanuda con la nueva pista
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error('[main] no se pudo decodificar la pista:', err);
+            trackName.textContent = '⚠️ No se pudo decodificar el archivo';
+        }
+        trackFile.value = ''; // permite recargar el mismo archivo
+    });
+
     sourceSelect.addEventListener('change', () => {
         app.setSource(sourceSelect.value as AudioSourceId);
+        if (sourceSelect.value === 'user-sample') {
+            if (playing) startImportedTrack();
+        } else {
+            stopImportedTrack();
+        }
     });
 
     gainInput.addEventListener('input', () => app.setGain(Number(gainInput.value)));
 
     bypassInput.addEventListener('change', () => app.setBypass(bypassInput.checked));
 
-    const playButton = getEl<HTMLButtonElement>('play');
-    let playing = false;
     playButton.addEventListener('click', () => {
         void audio?.resume();
         playing = !playing;
         app.setPlaying(playing);
         playButton.textContent = playing ? '⏸ Stop' : '▶ Play';
+        if (sourceSelect.value === 'user-sample') {
+            if (playing) startImportedTrack();
+            else stopImportedTrack();
+        }
     });
 
     // -----------------------------------------------------------------------

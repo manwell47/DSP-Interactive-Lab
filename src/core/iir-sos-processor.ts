@@ -92,9 +92,13 @@ export class IirSosProcessor {
     }
 
     /**
-     * Procesa un bloque de 128 muestras (mono). Si hay canal de entrada (grafo
-     * de audio aguas arriba, p. ej. user-sample) se usa como señal; en otro caso
-     * se genera la fuente interna. Cero asignaciones (M3).
+     * Procesa un bloque de 128 muestras (mono). El canal de entrada del grafo
+     * (p. ej. una pista MP3/WAV decodificada → AudioBufferSourceNode) SOLO se
+     * usa cuando la fuente es 'user-sample'. Los generadores internos
+     * (white-noise / sine) NUNCA dependen del canal de entrada: en algunos
+     * navegadores un AudioWorkletNode entrega un canal mudo (a ceros) aunque no
+     * haya conexiones aguas arriba, lo que silenciaba el ruido (§7.4, corrección
+     * v1.2.1). 'none' es silencio. Cero asignaciones (M3).
      */
     process(
         inputs: Float32Array[][],
@@ -106,18 +110,11 @@ export class IirSosProcessor {
         const input = inputs[0]?.[0];
         const n = output.length;
 
-        if (input) {
-            // Señal de entrada presente (grafo aguas arriba): se filtra tal cual.
-            for (let i = 0; i < n; i++) {
-                const y = this.playing ? this.smoother.processSample(input[i]) * this.gain : 0;
-                output[i] = y;
-            }
-        } else {
-            // Generador interno + filtro + rampas.
-            for (let i = 0; i < n; i++) {
-                const y = this.playing ? this.smoother.processSample(this.sampleSource()) * this.gain : 0;
-                output[i] = y;
-            }
+        const useInput = this.source === 'user-sample' && input !== undefined;
+        for (let i = 0; i < n; i++) {
+            const x = useInput ? input[i] : this.sampleSource();
+            const y = this.playing ? this.smoother.processSample(x) * this.gain : 0;
+            output[i] = y;
         }
         return true;
     }
@@ -136,7 +133,8 @@ export class IirSosProcessor {
             }
             case 'user-sample':
             case 'none':
-                return 0; // sin generador: el canal de entrada la provee
+            default:
+                return 0; // 'none': silencio; 'user-sample' sin canal de entrada
         }
     }
 }

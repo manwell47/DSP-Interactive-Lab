@@ -218,6 +218,7 @@ describe('DspWorker (hilo B, §3/§9)', () => {
 describe('IirSosProcessor (hilo C, §7)', () => {
     it('T-PROC-1 — SET_BYPASS inmediato: passthrough exacto de la entrada (§7.4)', () => {
         const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'user-sample', ramp: { samples: 0, mode: 'crossfade' } });
         const N = 128;
         proc.onMessage({ type: 'SET_BYPASS', bypass: true, ramp: { samples: 0, mode: 'crossfade' } });
         proc.onMessage({ type: 'PLAY', start: true });
@@ -231,6 +232,7 @@ describe('IirSosProcessor (hilo C, §7)', () => {
 
     it('T-PROC-2 — SET_COEFFICIENTS: el escalón asienta a la ganancia DC (I5)', () => {
         const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'user-sample', ramp: { samples: 0, mode: 'crossfade' } });
         const sos = makeSos(
             [cp(0.8, 0.6), cp(0.8, -0.6)],
             [cp(0.3, 0.1), cp(0.3, -0.1)],
@@ -282,6 +284,7 @@ describe('IirSosProcessor (hilo C, §7)', () => {
 
     it('T-PROC-5 — SET_BYPASS con crossfade: residuo relativo < -80 dB al final de la rampa (§7.4)', () => {
         const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'user-sample', ramp: { samples: 0, mode: 'crossfade' } });
         const sos = makeSos([cp(0.9, 0.7), cp(0.9, -0.7)], [], 1.0);
         // Filtro activo con rampa crossfade (R = 256 muestras = 2 bloques)
         proc.onMessage({ type: 'SET_COEFFICIENTS', sos, ramp: { samples: 256, mode: 'crossfade' } });
@@ -314,5 +317,80 @@ describe('IirSosProcessor (hilo C, §7)', () => {
             for (let i = 0; i < N; i++) maxResid = Math.max(maxResid, Math.abs(out[i] - 1));
         }
         expect(maxResid).toBeLessThan(1e-4);
+    });
+
+    it('T-PROC-6 — ruido blanco con canal de entrada mudo: el generador interno sigue sonando (§7.4)', () => {
+        // Regresión del bug "no suena el ruido": en algunos navegadores un
+        // AudioWorkletNode entrega un canal de entrada mudo (a ceros) aunque no
+        // haya conexiones aguas arriba. Los generadores internos NO deben
+        // depender de ese canal: solo 'user-sample' lo consume.
+        const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'white-noise', ramp: { samples: 0, mode: 'crossfade' } });
+        proc.onMessage({ type: 'PLAY', start: true });
+
+        const N = 128;
+        const { inputs, outputs } = wrapIO(new Float32Array(N)); // canal presente pero mudo
+        proc.process(inputs, outputs, {});
+        const out = outputs[0][0];
+
+        let peak = 0;
+        let nz = 0;
+        for (let i = 0; i < N; i++) {
+            peak = Math.max(peak, Math.abs(out[i]));
+            if (out[i] !== 0) nz++;
+        }
+        expect(peak).toBeGreaterThan(0.1); // ruido audible, no silencio
+        expect(nz).toBeGreaterThan(N / 2); // no es una muestra suelta
+    });
+
+    it('T-PROC-7 — seno con canal de entrada mudo: el generador interno sigue sonando', () => {
+        const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'sine', ramp: { samples: 0, mode: 'crossfade' } });
+        proc.onMessage({ type: 'PLAY', start: true });
+
+        const N = 128;
+        const { inputs, outputs } = wrapIO(new Float32Array(N));
+        proc.process(inputs, outputs, {});
+        const out = outputs[0][0];
+        let peak = 0;
+        for (let i = 0; i < N; i++) peak = Math.max(peak, Math.abs(out[i]));
+        expect(peak).toBeGreaterThan(0.5);
+    });
+
+    it('T-PROC-8 — user-sample: filtra el canal de entrada (identidad por defecto)', () => {
+        const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'user-sample', ramp: { samples: 0, mode: 'crossfade' } });
+        proc.onMessage({ type: 'PLAY', start: true });
+
+        const N = 128;
+        const input = monoBlock(N, (i) => 0.4 * Math.sin((2 * Math.PI * 3 * i) / N));
+        const { inputs, outputs } = wrapIO(input);
+        proc.process(inputs, outputs, {});
+        const out = outputs[0][0];
+        for (let i = 0; i < N; i++) expect(out[i]).toBeCloseTo(input[i], 6);
+    });
+
+    it('T-PROC-9 — user-sample sin canal de entrada: silencio', () => {
+        const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'user-sample', ramp: { samples: 0, mode: 'crossfade' } });
+        proc.onMessage({ type: 'PLAY', start: true });
+
+        const N = 128;
+        const { inputs, outputs } = wrapIO(); // sin canal de entrada
+        proc.process(inputs, outputs, {});
+        const out = outputs[0][0];
+        for (let i = 0; i < N; i++) expect(out[i]).toBe(0);
+    });
+
+    it('T-PROC-10 — none (Silencio): salida nula incluso con canal de entrada', () => {
+        const proc = new IirSosProcessor({ sampleRate: 48000 });
+        proc.onMessage({ type: 'SET_SOURCE', source: 'none', ramp: { samples: 0, mode: 'crossfade' } });
+        proc.onMessage({ type: 'PLAY', start: true });
+
+        const N = 128;
+        const { inputs, outputs } = wrapIO(monoBlock(N, () => 1));
+        proc.process(inputs, outputs, {});
+        const out = outputs[0][0];
+        for (let i = 0; i < N; i++) expect(out[i]).toBe(0);
     });
 });
