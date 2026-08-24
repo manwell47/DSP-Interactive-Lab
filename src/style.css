@@ -1,0 +1,208 @@
+/* Fase 10 — Hoja de estilos de la app de navegador (index.html). */
+:root {
+    color-scheme: dark;
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--panel-border);
+    background: var(--panel);
+}
+
+header h1 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+header .tag {
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+#status {
+    margin-left: auto;
+    font-size: 0.8rem;
+}
+
+#status.ok {
+    color: #3fb950;
+}
+
+#status.warn {
+    color: #d29922;
+}
+
+main {
+    display: grid;
+    grid-template-columns: minmax(300px, 480px) 1fr minmax(260px, 340px);
+    gap: 0.75rem;
+    padding: 0.75rem;
+    height: calc(100% - 3.2rem);
+}
+
+section,
+aside {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+section h2,
+aside h2,
+aside h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #111;
+    border-radius: 4px;
+}
+
+#zplane {
+    flex: 1;
+    min-height: 0;
+}
+
+.hint {
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin: 0.5rem 0 0;
+}
+
+.charts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 0;
+}
+
+.chart {
+    flex: 1;
+    min-height: 0;
+}
+
+aside {
+    overflow: auto;
+    gap: 0.5rem;
+}
+
+pre {
+    margin: 0;
+    background: #0d1117;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    padding: 0.5rem;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+#inspector-transfer {
+    min-height: 3rem;
+}
+
+#inspector-equation {
+    min-height: 4rem;
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+}
+
+.controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+.controls select,
+.controls input[type="range"] {
+    flex: 1;
+    max-width: 60%;
+}
+
+#play {
+    background: var(--accent);
+    color: #0d1117;
+    border: none;
+    border-radius: 4px;
+    padding: 0.45rem 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+#play:hover {
+    filter: brightness(1.1);
+}
+
+/* Sección HELP colapsable de teoría (dentro del panel inspector). */
+.help {
+    margin-top: 0.5rem;
+    border-top: 1px solid var(--panel-border);
+    padding-top: 0.5rem;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--muted);
+}
+
+.help summary {
+    cursor: pointer;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.78rem;
+    color: var(--accent);
+}
+
+.help p {
+    margin: 0.5rem 0 0;
+}
+
+.help code {
+    background: #0d1117;
+    border: 1px solid var(--panel-border);
+    border-radius: 3px;
+    padding: 0 0.25rem;
+    font-size: 0.72rem;
+    color: var(--text);
+}

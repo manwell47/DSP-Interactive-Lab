@@ -1,0 +1,173 @@
+/**
+ * src/core/iir-sos-processor.ts
+ *
+ * Fase 7 — Hilo C: AudioWorkletProcessor (ARCHITECTURE.md §7).
+ *
+ * Procesa AudioNodeMessage (main → worklet, vía node.port) y ejecuta el
+ * filtrado IIR en tiempo real sobre bloques de 128 muestras:
+ *   - SET_COEFFICIENTS : cambia los coeficientes SOS con rampa anti-click
+ *                        (ParameterSmoother.setCoefficients, §7.3).
+ *   - SET_SOURCE       : fuente interna (white-noise / sine / user-sample).
+ *   - SET_GAIN         : ganancia de salida (rampa lineal).
+ *   - SET_BYPASS       : paso directo con crossfade hacia/desde el filtro (§7.4).
+ *   - PLAY             : arranca/para el sonido.
+ *
+ * process() es cero-asignación (M3, §8): escribe en el búfer de salida
+ * preasignado y usa generadores escalares (LCG para ruido, fase para seno).
+ *
+ * La clase es un "port-like" (núcleo puro testeable en Node): en un
+ * AudioWorkletGlobalScope real se auto-registra como 'iir-sos-processor'
+ * mediante un envoltorio que extiende AudioWorkletProcessor.
+ */
+import { ParameterSmoother } from './parameter-smoother';
+import { REFERENCE_SAMPLE_RATE } from './types';
+import type { AudioNodeMessage, AudioSourceId } from './types';
+
+/** Frecuencia por defecto del generador senoidal (Hz). */
+const DEFAULT_SINE_FREQUENCY = 440;
+const TWO_PI = 2 * Math.PI;
+
+/** Semilla del LCG de ruido blanco (Numerical Recipes). */
+const LCG_A = 1664525;
+const LCG_C = 1013904223;
+const LCG_M = 4294967296;
+
+/** Puerto del AudioWorkletProcessor (node.port en el hilo C). */
+export interface IirSosProcessorPort {
+    postMessage(message: unknown): void;
+    onmessage: ((event: { data: AudioNodeMessage }) => void) | null;
+}
+
+export interface IirSosProcessorOptions {
+    /** Frecuencia de muestreo (fs); por defecto globalThis.sampleRate o 48 kHz. */
+    readonly sampleRate?: number;
+    /** Puerto de mensajes; por defecto globalThis.port (AudioWorkletGlobalScope). */
+    readonly port?: IirSosProcessorPort;
+}
+
+export class IirSosProcessor {
+    private readonly smoother = new ParameterSmoother();
+    private readonly sampleRate: number;
+
+    /** Fuente interna seleccionada (§7.4). */
+    private source: AudioSourceId = 'none';
+    /** Ganancia de salida (ya rampeada al aplicarse el mensaje). */
+    private gain = 1;
+    /** PLAY: el generador está activo. */
+    private playing = false;
+
+    /** Acumulador de fase del seno (Hz → rad). */
+    private phase = 0;
+    /** Estado del LCG de ruido blanco. */
+    private lcgState = 0x9e3779b9;
+
+    constructor(options: IirSosProcessorOptions = {}) {
+        const g = globalThis as { sampleRate?: number; port?: IirSosProcessorPort };
+        this.sampleRate = options.sampleRate ?? g.sampleRate ?? REFERENCE_SAMPLE_RATE;
+        const port = options.port ?? g.port;
+        if (port && typeof port.onmessage !== 'function') {
+            port.onmessage = (event: { data: AudioNodeMessage }) => this.onMessage(event.data);
+        }
+    }
+
+    /** Despacho de AudioNodeMessage (main → worklet, §3.2). */
+    onMessage(msg: AudioNodeMessage): void {
+        switch (msg.type) {
+            case 'SET_COEFFICIENTS':
+                this.smoother.setCoefficients(msg.sos, msg.ramp);
+                break;
+            case 'SET_SOURCE':
+                this.source = msg.source;
+                break;
+            case 'SET_GAIN':
+                this.gain = msg.gain;
+                break;
+            case 'SET_BYPASS':
+                this.smoother.setBypass(msg.bypass, msg.ramp);
+                break;
+            case 'PLAY':
+                this.playing = msg.start;
+                break;
+        }
+    }
+
+    /**
+     * Procesa un bloque de 128 muestras (mono). Si hay canal de entrada (grafo
+     * de audio aguas arriba, p. ej. user-sample) se usa como señal; en otro caso
+     * se genera la fuente interna. Cero asignaciones (M3).
+     */
+    process(
+        inputs: Float32Array[][],
+        outputs: Float32Array[][],
+        _parameters: Record<string, Float32Array>,
+    ): boolean {
+        const output = outputs[0]?.[0];
+        if (!output) return true;
+        const input = inputs[0]?.[0];
+        const n = output.length;
+
+        if (input) {
+            // Señal de entrada presente (grafo aguas arriba): se filtra tal cual.
+            for (let i = 0; i < n; i++) {
+                const y = this.playing ? this.smoother.processSample(input[i]) * this.gain : 0;
+                output[i] = y;
+            }
+        } else {
+            // Generador interno + filtro + rampas.
+            for (let i = 0; i < n; i++) {
+                const y = this.playing ? this.smoother.processSample(this.sampleSource()) * this.gain : 0;
+                output[i] = y;
+            }
+        }
+        return true;
+    }
+
+    /** Muestra siguiente del generador interno (escalar, sin asignación). */
+    private sampleSource(): number {
+        switch (this.source) {
+            case 'white-noise': {
+                this.lcgState = (Math.imul(LCG_A, this.lcgState) + LCG_C) >>> 0;
+                return (this.lcgState / LCG_M) * 2 - 1; // bipolar [-1, 1)
+            }
+            case 'sine': {
+                this.phase += (TWO_PI * DEFAULT_SINE_FREQUENCY) / this.sampleRate;
+                if (this.phase >= TWO_PI) this.phase -= TWO_PI;
+                return Math.sin(this.phase);
+            }
+            case 'user-sample':
+            case 'none':
+                return 0; // sin generador: el canal de entrada la provee
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-registro en un AudioWorkletGlobalScope real (hilo C).
+// En Node (pruebas) registerProcessor no existe y este bloque se omite.
+// ---------------------------------------------------------------------------
+if (typeof (globalThis as { registerProcessor?: unknown }).registerProcessor === 'function') {
+    const G = globalThis as unknown as {
+        registerProcessor(name: string, ctor: new () => unknown): void;
+        AudioWorkletProcessor: new () => { port: IirSosProcessorPort };
+        sampleRate: number;
+    };
+    if (typeof G.AudioWorkletProcessor === 'function') {
+        class IirSosProcessorNode extends G.AudioWorkletProcessor {
+            private readonly impl: IirSosProcessor;
+
+            constructor() {
+                super();
+                this.impl = new IirSosProcessor({ sampleRate: G.sampleRate, port: this.port });
+            }
+
+            process(
+                inputs: Float32Array[][],
+                outputs: Float32Array[][],
+                parameters: Record<string, Float32Array>,
+            ): boolean {
+                return this.impl.process(inputs, outputs, parameters);
+            }
+        }
+        G.registerProcessor('iir-sos-processor', IirSosProcessorNode);
+    }
+}

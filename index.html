@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DSP Interactive Learning Engine v1.2</title>
+    <link rel="stylesheet" href="/src/style.css" />
+</head>
+
+<body>
+    <header>
+        <h1>DSP Interactive Learning Engine</h1>
+        <span class="tag">v1.2 · Fase 10</span>
+        <span id="status">inicializando…</span>
+    </header>
+
+    <main>
+        <section id="zplane-panel">
+            <h2>Plano Z</h2>
+            <canvas id="zplane"></canvas>
+            <p class="hint">Clic izquierdo: polo · Clic derecho: cero · Arrastre: mover · Rueda: ganancia (1.1×) ·
+                Supr/Backspace: borrar</p>
+        </section>
+
+        <div class="charts">
+            <div class="chart">
+                <h2>Espectro (magnitud · fase · retardo de grupo)</h2>
+                <canvas id="spectrum"></canvas>
+            </div>
+            <div class="chart">
+                <h2>Dominio temporal (impulso · escalón)</h2>
+                <canvas id="time"></canvas>
+            </div>
+        </div>
+
+        <aside id="inspector-panel">
+            <h2>Inspector matemático</h2>
+            <pre id="inspector-transfer">H(z) = —</pre>
+            <h3>Ecuaciones de sección</h3>
+            <pre id="inspector-equation">—</pre>
+            <h3>Control de audio</h3>
+            <div class="controls">
+                <label>Fuente
+                    <select id="source">
+                        <option value="sine">Seno (440 Hz)</option>
+                        <option value="white-noise" selected>Ruido blanco</option>
+                        <option value="none">Silencio</option>
+                    </select>
+                </label>
+                <label>Ganancia
+                    <input id="gain" type="range" min="0" max="2" step="0.01" value="1" />
+                </label>
+                <label><input id="bypass" type="checkbox" /> Bypass del filtro</label>
+                <button id="play">▶ Play</button>
+            </div>
+            <details class="help">
+                <summary>HELP · Teoría</summary>
+                <p>
+                    <strong>Plano Z</strong>: cada <code>×</code> es un polo y cada
+                    <code>○</code> un cero de la función de transferencia. Los polos deben
+                    estar dentro de la circunferencia unidad (módulo <code>|z|</code> menor que 1) para que
+                    el filtro sea estable. Con coeficientes reales, las raíces complejas
+                    aparecen en <strong>pares conjugados</strong>.
+                </p>
+                <p>
+                    <strong>Espectro</strong>: la magnitud se muestra en dB (azul), la fase
+                    envuelta en <code>[−π, π]</code> (amarilla) y el retardo de grupo
+                    <code>τ<sub>g</sub></code> (verde). El eje X recorre
+                    <code>ω ∈ [0, 2π]</code> (de DC a la frecuencia de muestreo).
+                </p>
+                <p>
+                    <strong>Dominio temporal</strong>: <code>h[n]</code> es la respuesta al
+                    impulso y <code>s[n]</code> la respuesta al escalón. El transitorio
+                    muestra cómo reacciona el filtro; el escalón asentado vale la ganancia DC.
+                    La <em>ventana</em> se auto-ajusta al tiempo de asentamiento para que el
+                    transitorio llene todo el ancho del gráfico.
+                </p>
+                <p>
+                    <strong>Controles</strong>: clic izquierdo añade/mueve un polo, clic
+                    derecho un cero, la rueda ajusta la ganancia (<code>×1.1</code>) y
+                    <code>Supr</code>/<code>Backspace</code> borra la raíz seleccionada. El
+                    filtro se implementa como biquads SOS en cascada.
+                </p>
+            </details>
+        </aside>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>
