@@ -134,7 +134,14 @@ export class IirSosProcessor {
         const useInput = this.source === 'user-sample' && input !== undefined;
         if (!this.loggedProcess) {
             this.loggedProcess = true;
-            this.dbg('process: primer bloque — source =', this.source, 'playing =', this.playing, 'useInput =', useInput, 'sampleRate =', this.sampleRate);
+            this.dbg(
+                'process: primer bloque — source =', this.source,
+                'playing =', this.playing,
+                'useInput =', useInput,
+                'sampleRate =', this.sampleRate,
+                'outCh =', outputs[0]?.length ?? 0,
+                'inCh =', inputs[0]?.length ?? 0,
+            );
         }
         for (let i = 0; i < n; i++) {
             const x = useInput ? input[i] : this.sampleSource();
