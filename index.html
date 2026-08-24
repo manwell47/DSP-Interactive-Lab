@@ -5,6 +5,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DSP Interactive Learning Engine v1.2</title>
+    <!-- Service worker que inyecta COOP/COEP en GitHub Pages para habilitar
+         SharedArrayBuffer/Atomics (crossOriginIsolated). No actúa en dev. -->
+    <script id="coi-serviceworker" src="./coi-serviceworker.js"></script>
     <link rel="stylesheet" href="/src/style.css" />
 </head>
 
