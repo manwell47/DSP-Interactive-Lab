@@ -37,6 +37,10 @@ import { InspectorView } from './ui/inspector-view';
 import { packRoots } from './core/pack';
 import type { ZPlaneDraw } from './core/z-plane-view';
 import type { AudioSourceId, WorkerRequest, WorkerResponse } from './core/types';
+// Worklet de audio empaquetado por Vite como módulo ES (.js) vía '?worker&url'
+// (+ worker.format 'es' en vite.config.ts). Obligatorio para GitHub Pages: un
+// asset .ts se sirve como 'video/mp2t' y audioWorklet.addModule() lo rechaza.
+import workletUrl from './core/iir-sos-processor.ts?worker&url';
 
 // ---------------------------------------------------------------------------
 // Helpers DOM (tipados con lib DOM del tsconfig.browser.json)
@@ -103,7 +107,6 @@ async function boot(): Promise<void> {
     try {
         audio = new AudioContext({ latencyHint: 'interactive' });
         dbg('AudioContext creado, state =', audio.state);
-        const workletUrl = new URL('./core/iir-sos-processor.ts', import.meta.url).href;
         dbg('addModule URL =', workletUrl);
         await audio.audioWorklet.addModule(workletUrl);
         dbg('addModule OK');

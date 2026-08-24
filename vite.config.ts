@@ -26,4 +26,11 @@ export default defineConfig({
     preview: {
         headers: crossOriginHeaders,
     },
+    // El worklet de audio se importa con '?worker&url' (ver src/main.ts). Con
+    // format 'es' Vite lo empaqueta a un módulo JavaScript autocontenido (.js),
+    // resolviendo imports y borrando tipos. Es obligatorio para GitHub Pages:
+    // un asset .ts se sirve como 'video/mp2t' y audioWorklet.addModule lo rechaza.
+    worker: {
+        format: 'es',
+    },
 });
